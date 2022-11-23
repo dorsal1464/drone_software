@@ -1,0 +1,90 @@
+
+
+<!DOCTYPE html>
+<!--
+ @license
+ Copyright 2019 Google LLC. All Rights Reserved.
+ SPDX-License-Identifier: Apache-2.0
+-->
+<html>
+  <head>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=default"></script>
+	<link rel="stylesheet" type="text/css" href=".\style.css" />
+    <script type="module">
+		// Initialize and add the map
+		function initMap() {
+		  // var ws = new WebSocket("ws://localhost:7070")
+		  // The location of Uluru
+		  var myLatlng = new google.maps.LatLng(-25.363882,131.044922);
+
+		  // The map, centered at Uluru
+		  var map = new google.maps.Map(document.getElementById("map"), {
+			zoom: 18,
+			center: {lat: -34, lng: 151},
+			mapTypeId: 'satellite',
+			gestureHandling: "none"
+		  });
+		  var svgMarker = {
+			path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+			fillColor: "red",
+			fillOpacity: 0.9,
+			strokeWeight: 0,
+			rotation: 0,
+			scale: 7,
+			anchor: new google.maps.Point(0, 0),
+		  };
+
+		  var droneMarker = new google.maps.Marker({
+			position: map.getCenter(),
+			map: map,
+			draggable:false,
+			icon: svgMarker,
+			title:"Drone",
+		  });
+		  
+		  var waypointMarker = new google.maps.Marker({
+			position: map.getCenter(),
+			map: map,
+			draggable:true,
+			title:"Location",
+		  });
+		  
+		  function updateGPS() {
+			console.log("updating GPS");
+			// map.setCenter({lat: -34.01, lng: 151});
+			// droneMarker.setPosition(map.getCenter());
+			var ws = new WebSocket("ws://localhost:7070");
+			
+			ws.addEventListener('message', function (event) {
+				var f0 = parseFloat(event.data.split(":")[0]);
+				var f1 = parseFloat(event.data.split(":")[1]);
+				console.log('Message from server ', event.data);
+				map.setCenter({lat: f0, lng: f1});
+				droneMarker.setPosition(map.getCenter());
+				ws.close();
+			  });
+		  }
+		  
+		  var updater=setInterval(updateGPS, 1000);
+		}
+
+		window.initMap = initMap;
+		
+	</script>
+  </head>
+  <body>
+    <!--The div element for the map -->
+    <div id="map"></div>
+
+    <!-- 
+     The `defer` attribute causes the callback to execute after the full HTML
+     document has been parsed. For non-blocking uses, avoiding race conditions,
+     and consistent behavior across browsers, consider loading using Promises
+     with https://www.npmjs.com/package/@googlemaps/js-api-loader.
+    -->
+    <script
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDN8-UplCyNc3zB18mUygkis7cUpp0dGHQ&callback=initMap&v=weekly"
+      defer
+    ></script>
+  </body>
+</html>

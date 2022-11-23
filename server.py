@@ -1,11 +1,14 @@
 # this code will run on the drone
 
+import time
+import struct
 import socket
 import threading
 import imagezmq
 import cv2 as cv
 import pickle
 from arduino import ArduinoSerialComm
+from udp_utils import udpBroadcaster
 
 # communicating via wifi
 HOST = '0.0.0.0'
@@ -23,7 +26,7 @@ FPS = 60.0
 class DroneServer:
     def __init__(self):
         # telemetry and control will use tcp
-        self.tel_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.tel_sock = udpBroadcaster(TELEMETRY_PORT)
         self.con_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.cam_sock = imagezmq.ImageSender()
         self.master = None
@@ -37,14 +40,13 @@ class DroneServer:
 
     def init(self, host=HOST):
         self.host = host
-        self.tel_sock.bind((host, TELEMETRY_PORT))
         self.con_sock.bind((host, CONTROL_PORT))
         self.con_sock.listen(1)
-        self.tel_sock.listen(2)
+        # self.tel_sock.listen(1)
         # wait for a connection on control port
         self.master = self.con_sock.accept()
         # wait for telemetry connection - at least one
-        self.telemetry_clients.append(self.tel_sock.accept())
+        # self.telemetry_clients.append(self.tel_sock.accept())
         # setup image socket
         self.cam_sock = imagezmq.ImageSender('tcp://'+str(self.master[1][0])+':'+str(CAM_PORT), False)
         # after connection was established, set timeout
@@ -57,7 +59,7 @@ class DroneServer:
         self.threads.append(threading.Thread(target=self.control_updown))
         self.threads.append(threading.Thread(target=self.telemetry_up))
         self.threads.append(threading.Thread(target=self.camera_up))
-        self.threads.append(threading.Thread(target=self.add_telemetry))
+        # self.threads.append(threading.Thread(target=self.add_telemetry))
         for t in self.threads:
             print(t)
         for t in self.threads:
@@ -91,6 +93,11 @@ class DroneServer:
             # send telemetry as soon as arduino has the data
             data = self.arduino_controller.get_data()
             # send to each telemetry client
+            try:
+                print(self.tel_sock.send(data.encode()))
+            except Exception as e:
+                print(e)
+
             for tel in self.telemetry_clients:
                 try:
                     tel[0].send(pickle.dumps(data))
@@ -99,6 +106,7 @@ class DroneServer:
                     # remove dead connection
                     self.telemetry_clients.remove(tel)
                     tel[0].close()
+            time.sleep(1.0 / 2)
 
 # control packet structure:
 # COMMAND: int of command id

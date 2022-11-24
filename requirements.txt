@@ -1,5 +1,8 @@
-imagezmq~=1.1.1
-opencv-python~=4.1.0.25
-keyboard~=0.13.5
-pyserial~=3.4
-numpy~=1.15.4
+imagezmq
+opencv-python
+keyboard
+pyserial
+numpy
+pywinusb
+websockets
+pyqtwebengine

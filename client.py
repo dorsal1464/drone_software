@@ -10,6 +10,8 @@ import keyboard
 import time
 import asyncio
 import websockets
+import struct
+import pywinusb.hid
 from PyQt5 import uic, QtWidgets, QtCore, QtGui
 from PyQt5.QtWebEngineWidgets import *
 from PyQt5.QtCore import *
@@ -17,8 +19,8 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from udp_utils import udpConsumer
 
-
 # communicating via wifi
+
 TELEMETRY_PORT = 8001
 CONTROL_PORT = 8000
 CAM_PORT = 5556
@@ -28,8 +30,20 @@ GPS_REFRESH_RATE = 1
 
 GPS = [31.936086, 34.7801967]
 
+pitch, yaw, roll, thrust = 0, 0, 0, 0
+main_ui, drone_comm = None, None
 
 # security is assumed via password protected wifi
+
+
+def handler(data):
+    global pitch, yaw, roll, thrust
+    yaw = int((data[8] - 128) * 16384.0 / 256)
+    roll, pitch = struct.unpack("<HH", bytes(data[4:8]))
+    roll -= 8192
+    pitch -= 8192
+    thrust = int((255 - data[9]) * 1000.0 / 255)
+    keys = data[1]
 
 
 class DroneController:
@@ -42,20 +56,26 @@ class DroneController:
         self.threads = list()
         self.done = False
         self.ui: UiWindow = uiwindow
+        self.default_input = True
 
-    def init(self, host):
+    def init(self, host, input_method='default'):
         self.con_sock.connect((host, CONTROL_PORT))
         # self.tel_sock.connect((host, TELEMETRY_PORT))
         self.cam_sock = imagezmq.ImageHub('tcp://'+host+':'+str(CAM_PORT), False)
         # after connection was established, set timeout
         self.con_sock.settimeout(TIMEOUT)
+        if input_method != 'default':
+            self.default_input = False
+            for device in pywinusb.hid.find_all_hid_devices():
+                if input_method == "{} {}".format(device.vendor_name, device.product_name):
+                    device.open()
+                    device.set_raw_data_handler(handler)
         return self
 
     def start(self):
         # start receiving / sending data
         self.threads.append(threading.Thread(target=self.control_updown))
         self.threads.append(threading.Thread(target=self.updateGPS))
-        # self.threads.append(threading.Thread(target=self.update_telemetry))
         tl = TelThread(self)
         tl.changeText.connect(self.ui.set_text)
         self.threads.append(tl)
@@ -80,31 +100,32 @@ class DroneController:
 
     def control_updown(self):
         # always expecting input, timeout is set to TIMEOUT
-        throttle = 1000
         while not self.done:
             # sample keyboard inputs
             # pitch, roll, yaw, throttle
-            pitch, roll, yaw, throttle = 1500, 1500, 1500, throttle
-            if keyboard.is_pressed('w'):
-                pitch += 250
-            if keyboard.is_pressed('s'):
-                pitch -= 250
-            if keyboard.is_pressed('d'):
-                pitch += 250
-            if keyboard.is_pressed('a'):
-                roll -= 250
-            if keyboard.is_pressed('q'):
-                yaw -= 250
-            if keyboard.is_pressed('e'):
-                yaw += 250
-            if keyboard.is_pressed('shift'):
-                throttle += 5
-                throttle = min(2000, throttle)
-            if keyboard.is_pressed('ctrl'):
-                throttle -= 5
-                throttle = max(1000, throttle)
+            global pitch, yaw, roll, thrust
+            if self.default_input:
+                pitch, yaw, roll = 0, 0, 0
+                if keyboard.is_pressed('w'):
+                    pitch = 250
+                if keyboard.is_pressed('s'):
+                    pitch = -250
+                if keyboard.is_pressed('d'):
+                    roll = 250
+                if keyboard.is_pressed('a'):
+                    roll = -250
+                if keyboard.is_pressed('q'):
+                    yaw = -250
+                if keyboard.is_pressed('e'):
+                    yaw = 250
+                if keyboard.is_pressed('shift'):
+                    thrust += 5
+                    thrust = min(1000, thrust)
+                if keyboard.is_pressed('ctrl'):
+                    thrust -= 5
+                    thrust = max(0, thrust)
             # assemble args control vector
-            args = [pitch, roll, yaw, throttle]
+            args = [pitch, roll, yaw, thrust]
             # by default, we have a move command
             command = 0
             # may be adjusted in the future...
@@ -142,6 +163,37 @@ class DroneController:
         asyncio.get_event_loop().run_forever()
 
 
+class EntryWindow(QtWidgets.QMainWindow):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        uic.loadUi('entry.ui', self)
+        self.input_combo: QtWidgets.QComboBox = self.findChild(QtWidgets.QComboBox, 'inputMethodCombo')
+        self.host_line: QtWidgets.QLineEdit = self.findChild(QtWidgets.QLineEdit, 'hostEdit')
+        self.connect_btn: QtWidgets.QPushButton = self.findChild(QtWidgets.QPushButton, 'connectBtn')
+
+        self.connect_btn.clicked.connect(self.connect)
+        self.input_combo.addItem("default")
+        for device in pywinusb.hid.find_all_hid_devices():
+            if "Keyboard" not in device.product_name:
+                self.input_combo.addItem("{} {}".format(device.vendor_name, device.product_name))
+        self.show()
+        print("done")
+
+    def connect(self):
+        global main_ui, drone_comm
+        self.close()
+        host = self.host_line.text()
+        method = self.input_combo.currentText()
+        main_ui = UiWindow()
+        main_ui.show()
+        try:
+            drone_comm = DroneController(main_ui)
+            drone_comm.init(host, method).start()
+            # drone_comm.start()
+        except Exception as e:
+            print(e)
+
+
 class UiWindow(QtWidgets.QMainWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -160,7 +212,6 @@ class UiWindow(QtWidgets.QMainWindow):
         self.browser.load(QUrl.fromLocalFile(os.getcwd() + "\\web\\index.html"))
         # self.browser.load(QUrl("file:///C:/Users/Dor/OneDrive%20-%20Bar-Ilan%20University/Documents/drone_software-master/test.html"))
         self.fps: QtWidgets.QLabel = self.findChild(QtWidgets.QLabel, 'fps')
-        print(self.fps)
         self.show()
         print("fine")
 

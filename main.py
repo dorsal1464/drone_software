@@ -10,10 +10,10 @@ if __name__ == '__main__':
     c = input("type: ")
     if str(c) == 'c':
         app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
-        ui = client.UiWindow()
-        i = client.DroneController(ui)
-        i.init('127.0.0.1')
-        i.start()
+        ui = client.EntryWindow()
+        # i = client.DroneController(ui)
+        # i.init('127.0.0.1')
+        # i.start()
         app.exec()  # Start the application
     if str(c) == 's':
         i = server.DroneServer()

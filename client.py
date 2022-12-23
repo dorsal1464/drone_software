@@ -18,14 +18,15 @@ from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from udp_utils import udpConsumer
+from viperLinkEncoder import viperLinkEncoder, viperLinkMode, viperLinkCommand
 
 # communicating via wifi
 
-TELEMETRY_PORT = 8001
-CONTROL_PORT = 8000
+TELEMETRY_PORT = 8889
+CONTROL_PORT = 8888
 CAM_PORT = 5556
 TIMEOUT = 60.0
-REFRESH_RATE = 250   # Hz
+REFRESH_RATE = 100   # Hz
 GPS_REFRESH_RATE = 1
 
 GPS = [31.936086, 34.7801967]
@@ -33,6 +34,7 @@ GPS = [31.936086, 34.7801967]
 pitch, yaw, roll, thrust = 0, 0, 0, 0
 main_ui, drone_comm = None, None
 
+CONFIG_KEY_LIST = ["YAW_RR" , "ROLL_RR", "PITCH_RR"]
 # security is assumed via password protected wifi
 
 
@@ -44,6 +46,13 @@ def handler(data):
     pitch -= 8192
     thrust = int((255 - data[9]) * 1000.0 / 255)
     keys = data[1]
+    # yaw patch
+    if keys == 8:
+        yaw = 4096
+    elif keys == 4:
+        yaw = -4096
+    else:
+        yaw = 0
 
 
 class DroneController:
@@ -57,6 +66,8 @@ class DroneController:
         self.done = False
         self.ui: UiWindow = uiwindow
         self.default_input = True
+        self.vle = viperLinkEncoder()
+        self.canSend = False
 
     def init(self, host, input_method='default'):
         self.con_sock.connect((host, CONTROL_PORT))
@@ -71,6 +82,13 @@ class DroneController:
                     device.open()
                     device.set_raw_data_handler(handler)
         return self
+
+    def sendArm(self):
+        self.canSend = True
+        self.con_sock.send(self.vle.encodeArm())
+
+    def sendConfig(self, key, value):
+        self.con_sock.send(self.vle.encodeConfig(key, value))
 
     def start(self):
         # start receiving / sending data
@@ -93,10 +111,6 @@ class DroneController:
     # COMMAND: int of command id
     # VECTOR: control vector - (pitch, roll, yaw, throttle)
     # ARGS: if command is not 0 (move) includes parameters such as gps waypoint, alttiude hold etc.
-    def safe_send(self, msg):
-        length = int.to_bytes(len(msg), 4, 'little')
-        self.con_sock.send(length)
-        self.con_sock.sendall(msg)
 
     def control_updown(self):
         # always expecting input, timeout is set to TIMEOUT
@@ -107,38 +121,37 @@ class DroneController:
             if self.default_input:
                 pitch, yaw, roll = 0, 0, 0
                 if keyboard.is_pressed('w'):
+                    print("pitchplus")
                     pitch = 250
                 if keyboard.is_pressed('s'):
+                    print("pitchminus")
                     pitch = -250
                 if keyboard.is_pressed('d'):
-                    roll = 250
+                    roll = 450
                 if keyboard.is_pressed('a'):
-                    roll = -250
+                    roll = -450
                 if keyboard.is_pressed('q'):
-                    yaw = -250
+                    yaw = -50
                 if keyboard.is_pressed('e'):
-                    yaw = 250
+                    yaw = 50
                 if keyboard.is_pressed('shift'):
                     thrust += 5
                     thrust = min(1000, thrust)
                 if keyboard.is_pressed('ctrl'):
                     thrust -= 5
                     thrust = max(0, thrust)
-            # assemble args control vector
-            args = [pitch, roll, yaw, thrust]
             # by default, we have a move command
-            command = 0
+            command = viperLinkMode.Stabilize
             # may be adjusted in the future...
             if self.ui.auto_hover.isChecked():
-                command = 0
+                command = viperLinkMode.Stabilize
             elif self.ui.hold_alt.isChecked():
-                command = 1
+                altHold = 1
             elif self.ui.race_mode.isChecked():
-                command = 2
-            msg = {'COMMAND': command, 'VECTOR': args, 'ARGS': []}
+                command = viperLinkMode.Race
             try:
-                self.safe_send(pickle.dumps(msg))
-                self.con_sock.recv(16)
+                if self.canSend:
+                    self.con_sock.send(self.vle.encodeControl(pitch, yaw, roll, thrust))
             except socket.error as e:
                 # lost contact with drone, abort (for now)
                 print('lost connection - '+str(e))
@@ -161,6 +174,25 @@ class DroneController:
         server = websockets.serve(handler, "localhost", 7070)
         asyncio.get_event_loop().run_until_complete(server)
         asyncio.get_event_loop().run_forever()
+
+
+class ConfigDialog(QtWidgets.QWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        uic.loadUi('configDialog.ui', self)
+        self.keyBox: QtWidgets.QComboBox = self.findChild(QtWidgets.QComboBox, 'keyBox')
+        self.valueEdit: QtWidgets.QLineEdit = self.findChild(QtWidgets.QLineEdit, 'valueEdit')
+        self.sendBtn: QtWidgets.QPushButton = self.findChild(QtWidgets.QPushButton, 'sendButton')
+        # add all keys from global list
+        for key in CONFIG_KEY_LIST:
+            self.keyBox.addItem(key)
+        self.sendBtn.clicked.connect(self.sendConfig)
+
+    def sendConfig(self):
+        key = self.keyBox.currentText()
+        value = self.valueEdit.text()
+        global drone_comm
+        drone_comm.sendConfig(key, value)
 
 
 class EntryWindow(QtWidgets.QMainWindow):
@@ -189,7 +221,6 @@ class EntryWindow(QtWidgets.QMainWindow):
         try:
             drone_comm = DroneController(main_ui)
             drone_comm.init(host, method).start()
-            # drone_comm.start()
         except Exception as e:
             print(e)
 
@@ -199,6 +230,8 @@ class UiWindow(QtWidgets.QMainWindow):
         super().__init__(*args, **kwargs)
         uic.loadUi('main.ui', self)
         self.auto_hover: QtWidgets.QPushButton = self.findChild(QtWidgets.QPushButton, 'AutoHover')
+        self.arm: QtWidgets.QPushButton = self.findChild(QtWidgets.QPushButton, 'ArmButton')
+        self.arm.clicked.connect(self.send_arm)
         self.camera_feed: QtWidgets.QLabel = self.findChild(QtWidgets.QLabel, 'CameraFeed')
         self.camera_feed.setFixedSize(960, 540)
         self.race_mode = self.findChild(QtWidgets.QPushButton, 'RaceMode')
@@ -212,8 +245,19 @@ class UiWindow(QtWidgets.QMainWindow):
         self.browser.load(QUrl.fromLocalFile(os.getcwd() + "\\web\\index.html"))
         # self.browser.load(QUrl("file:///C:/Users/Dor/OneDrive%20-%20Bar-Ilan%20University/Documents/drone_software-master/test.html"))
         self.fps: QtWidgets.QLabel = self.findChild(QtWidgets.QLabel, 'fps')
+        self.configAction: QtWidgets.QAction = self.findChild(QtWidgets.QAction, 'configAction')
+        self.configAction.triggered.connect(self.config_submenu)
         self.show()
         print("fine")
+
+    def send_arm(self):
+        global drone_comm
+        drone_comm.sendArm()
+
+    def config_submenu(self):
+        print("starting dialog...")
+        self.configPopup = ConfigDialog()
+        self.configPopup.show()
 
     @QtCore.pyqtSlot(QtGui.QImage)
     def set_image(self, image):

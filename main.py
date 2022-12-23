@@ -7,7 +7,8 @@ from PyQt5 import uic, QtWidgets
 import sys
 
 if __name__ == '__main__':
-    c = input("type: ")
+    c = 'c'
+    # c = input("type: ")
     if str(c) == 'c':
         app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
         ui = client.EntryWindow()

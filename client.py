@@ -1,6 +1,7 @@
 # this code will run on the computer controlling the drone
 
 import os
+import math
 import socket
 import threading
 import imagezmq
@@ -11,6 +12,7 @@ import time
 import asyncio
 import websockets
 import struct
+import numpy as np
 import pywinusb.hid
 from PyQt5 import uic, QtWidgets, QtCore, QtGui
 from PyQt5.QtWebEngineWidgets import *
@@ -18,7 +20,7 @@ from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from udp_utils import udpConsumer
-from viperLinkEncoder import viperLinkEncoder, viperLinkMode, viperLinkCommand
+from viperLinkEncoder import viperLinkEncoder, viperLinkMode, viperLinkCommand, CONFIG_KEY_LIST
 
 # communicating via wifi
 
@@ -34,7 +36,6 @@ GPS = [31.936086, 34.7801967]
 pitch, yaw, roll, thrust = 0, 0, 0, 0
 main_ui, drone_comm = None, None
 
-CONFIG_KEY_LIST = ["YAW_RR" , "ROLL_RR", "PITCH_RR"]
 # security is assumed via password protected wifi
 
 
@@ -44,6 +45,7 @@ def handler(data):
     roll, pitch = struct.unpack("<HH", bytes(data[4:8]))
     roll -= 8192
     pitch -= 8192
+    print("data", data[9])
     thrust = int((255 - data[9]) * 1000.0 / 255)
     keys = data[1]
     # yaw patch
@@ -92,7 +94,7 @@ class DroneController:
 
     def start(self):
         # start receiving / sending data
-        self.threads.append(threading.Thread(target=self.control_updown))
+        self.threads.append(threading.Thread(target=self.controlUpdown))
         self.threads.append(threading.Thread(target=self.updateGPS))
         tl = TelThread(self)
         tl.changeText.connect(self.ui.set_text)
@@ -107,12 +109,16 @@ class DroneController:
             t.start()
         print("threads started...")
 
-    # control packet structure:
-    # COMMAND: int of command id
-    # VECTOR: control vector - (pitch, roll, yaw, throttle)
-    # ARGS: if command is not 0 (move) includes parameters such as gps waypoint, alttiude hold etc.
+    def stop(self):
+        self.done = True
+        self.con_sock.close()
+        self.tel_sock.close()
+        self.cam_sock.close()
+        self.con_sock = None
+        self.tel_sock = None
+        self.cam_sock = None
 
-    def control_updown(self):
+    def controlUpdown(self):
         # always expecting input, timeout is set to TIMEOUT
         while not self.done:
             # sample keyboard inputs
@@ -145,10 +151,12 @@ class DroneController:
             # may be adjusted in the future...
             if self.ui.auto_hover.isChecked():
                 command = viperLinkMode.Stabilize
-            elif self.ui.hold_alt.isChecked():
-                altHold = 1
             elif self.ui.race_mode.isChecked():
                 command = viperLinkMode.Race
+            else:
+                command = viperLinkMode.Reserved
+            if self.ui.hold_alt.isChecked():
+                altHold = 1
             try:
                 if self.canSend:
                     self.con_sock.send(self.vle.encodeControl(pitch, yaw, roll, thrust))
@@ -167,7 +175,7 @@ class DroneController:
         async def handler(websocket, path):
             # d = await websocket.recv()
             await websocket.send(str(GPS[0]) + ":" + str(GPS[1]))
-            GPS[0] += 0.00001
+            # GPS[0] += 0.00001
             self.ui.lan_coor.display(GPS[0])
             self.ui.lon_coor.display(GPS[1])
 
@@ -250,6 +258,13 @@ class UiWindow(QtWidgets.QMainWindow):
         self.show()
         print("fine")
 
+    def closeEvent(self, event):
+        # close sockets, threads
+        global drone_comm
+        drone_comm.stop()
+        super(UiWindow, self).closeEvent(event)
+        exit(0)
+
     def send_arm(self):
         global drone_comm
         drone_comm.sendArm()
@@ -314,14 +329,22 @@ class TelThread(QtCore.QThread):
     def run(self):
         while self.tel_sock is not None:
             try:
-                tel, _ = self.tel_sock.recv(2048)
-                if tel == b"dummy":
-                    tel = tel.decode('utf-8')
-                else:
-                    tel = pickle.loads(tel)
-                self.changeText.emit(tel)
+                tel, _ = self.tel_sock.recv(128)
+                if not tel:
+                    continue
+                pitch, heading, roll = struct.unpack("!hhh", tel[:6])
+                pitch = pitch * 180.0 / np.iinfo(np.int16).max
+                roll = roll * 180.0 / np.iinfo(np.int16).max
+                heading = heading * 360.0 / np.iinfo(np.int16).max
+                gps_lat = float(tel[6:6+16].replace(b'\x00', b'').decode()) / 10000 + 0.031169
+                gps_lng = float(tel[6+16:6+32].replace(b'\x00', b'').decode()) / 10000 + 0.340449
+                global GPS
+                GPS = [gps_lat, gps_lng]
+                alt = float(tel[6+32:].replace(b'\x00', b'').decode())
+                self.changeText.emit("pitch: {:.4f}, heading: {:.4f}, roll: {:.4f}, GPS: ({:.8f},{:.8f}), altitude: {:.2f}"
+                                     .format(pitch, heading, roll, gps_lat, gps_lng, alt))
             except socket.error:
                 self.tel_sock.close()
             except Exception as e:
-                print(e)
+                print("TEL THREAD:", e)
         self.tel_sock.close()

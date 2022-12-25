@@ -17,7 +17,7 @@ class udpBroadcaster(object):
 
 
 class udpConsumer(object):
-    def __init__(self, port, timeout=60.0):
+    def __init__(self, port, timeout=0.5):
         self.port = port
         self.client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         self.client.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

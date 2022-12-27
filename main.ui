@@ -6,14 +6,14 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1920</width>
-    <height>1000</height>
+    <width>1280</width>
+    <height>852</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>1920</width>
-    <height>1000</height>
+    <width>1280</width>
+    <height>720</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -34,11 +34,26 @@ font: 14pt &quot;MS Shell Dlg 2&quot;;</string>
      <layout class="QVBoxLayout" name="verticalLayout_4">
       <item>
        <widget class="QLabel" name="CameraFeed">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+          <horstretch>1</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="minimumSize">
          <size>
-          <width>920</width>
-          <height>540</height>
+          <width>640</width>
+          <height>480</height>
          </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>960</width>
+          <height>720</height>
+         </size>
+        </property>
+        <property name="lineWidth">
+         <number>0</number>
         </property>
         <property name="text">
          <string>CAMERA FEED</string>
@@ -47,6 +62,12 @@ font: 14pt &quot;MS Shell Dlg 2&quot;;</string>
       </item>
       <item>
        <widget class="QLabel" name="fps">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="maximumSize">
          <size>
           <width>16777215</width>
@@ -57,7 +78,7 @@ font: 14pt &quot;MS Shell Dlg 2&quot;;</string>
          <string>FPS</string>
         </property>
         <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
         </property>
        </widget>
       </item>
@@ -78,6 +99,12 @@ font: 14pt &quot;MS Shell Dlg 2&quot;;</string>
        <layout class="QHBoxLayout" name="horizontalLayout_3">
         <item>
          <widget class="QPushButton" name="ArmButton">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
           <property name="acceptDrops">
            <bool>false</bool>
           </property>
@@ -87,29 +114,34 @@ font: 14pt &quot;MS Shell Dlg 2&quot;;</string>
           <property name="checkable">
            <bool>true</bool>
           </property>
+          <property name="autoExclusive">
+           <bool>true</bool>
+          </property>
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="pushButton_2">
+         <widget class="QPushButton" name="DisarmButton">
           <property name="text">
-           <string>PushButton</string>
+           <string>DISARM</string>
           </property>
           <property name="checkable">
-           <bool>false</bool>
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+          <property name="autoExclusive">
+           <bool>true</bool>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="pushButton_4">
+         <widget class="QPushButton" name="pushButton_3">
           <property name="text">
            <string>PushButton</string>
           </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="pushButton">
-          <property name="text">
-           <string>PushButton</string>
+          <property name="autoExclusive">
+           <bool>true</bool>
           </property>
          </widget>
         </item>
@@ -118,9 +150,22 @@ font: 14pt &quot;MS Shell Dlg 2&quot;;</string>
      </layout>
     </item>
     <item>
+     <widget class="Line" name="line">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
        <widget class="QWebEngineView" name="WebView" native="true">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>1</verstretch>
+         </sizepolicy>
+        </property>
         <property name="minimumSize">
          <size>
           <width>300</width>
@@ -225,7 +270,7 @@ p, li { white-space: pre-wrap; }
             <property name="maximumSize">
              <size>
               <width>16777215</width>
-              <height>60</height>
+              <height>40</height>
              </size>
             </property>
             <property name="font">
@@ -253,7 +298,7 @@ p, li { white-space: pre-wrap; }
             <property name="maximumSize">
              <size>
               <width>16777215</width>
-              <height>60</height>
+              <height>40</height>
              </size>
             </property>
             <property name="font">
@@ -264,6 +309,9 @@ p, li { white-space: pre-wrap; }
               <italic>false</italic>
               <bold>false</bold>
              </font>
+            </property>
+            <property name="smallDecimalPoint">
+             <bool>false</bool>
             </property>
             <property name="digitCount">
              <number>8</number>
@@ -312,7 +360,7 @@ p, li { white-space: pre-wrap; }
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1920</width>
+     <width>1280</width>
      <height>23</height>
     </rect>
    </property>

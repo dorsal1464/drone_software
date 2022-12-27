@@ -89,6 +89,10 @@ class DroneController:
         self.canSend = True
         self.con_sock.send(self.vle.encodeArm())
 
+    def sendDisarm(self):
+        self.canSend = False
+        self.con_sock.send(self.vle.encodeDisarm())
+
     def sendConfig(self, key, value):
         self.con_sock.send(self.vle.encodeConfig(key, value))
 
@@ -240,6 +244,8 @@ class UiWindow(QtWidgets.QMainWindow):
         self.auto_hover: QtWidgets.QPushButton = self.findChild(QtWidgets.QPushButton, 'AutoHover')
         self.arm: QtWidgets.QPushButton = self.findChild(QtWidgets.QPushButton, 'ArmButton')
         self.arm.clicked.connect(self.send_arm)
+        self.disarm: QtWidgets.QPushButton = self.findChild(QtWidgets.QPushButton, 'DisarmButton')
+        self.disarm.clicked.connect(self.send_disarm)
         self.camera_feed: QtWidgets.QLabel = self.findChild(QtWidgets.QLabel, 'CameraFeed')
         self.camera_feed.setFixedSize(960, 540)
         self.race_mode = self.findChild(QtWidgets.QPushButton, 'RaceMode')
@@ -268,6 +274,10 @@ class UiWindow(QtWidgets.QMainWindow):
     def send_arm(self):
         global drone_comm
         drone_comm.sendArm()
+
+    def send_disarm(self):
+        global drone_comm
+        drone_comm.sendDisarm()
 
     def config_submenu(self):
         print("starting dialog...")
@@ -336,12 +346,12 @@ class TelThread(QtCore.QThread):
                 pitch = pitch * 180.0 / np.iinfo(np.int16).max
                 roll = roll * 180.0 / np.iinfo(np.int16).max
                 heading = heading * 360.0 / np.iinfo(np.int16).max
-                gps_lat = float(tel[6:6+16].replace(b'\x00', b'').decode()) / 10000 + 0.031169
-                gps_lng = float(tel[6+16:6+32].replace(b'\x00', b'').decode()) / 10000 + 0.340449
+                gps_lat = float(tel[6:6+16].replace(b'\x00', b'').decode())  # / 10000 + 0.031169
+                gps_lng = float(tel[6+16:6+32].replace(b'\x00', b'').decode())  # / 10000 + 0.340449
                 global GPS
                 GPS = [gps_lat, gps_lng]
                 alt = float(tel[6+32:].replace(b'\x00', b'').decode())
-                self.changeText.emit("pitch: {:.4f}, heading: {:.4f}, roll: {:.4f}, GPS: ({:.8f},{:.8f}), altitude: {:.2f}"
+                self.changeText.emit("pitch: {:.4f}, heading: {:.4f}, roll: {:.4f}, GPS: ({:.6f},{:.6f}), pressure: {:.2f}"
                                      .format(pitch, heading, roll, gps_lat, gps_lng, alt))
             except socket.error:
                 self.tel_sock.close()
